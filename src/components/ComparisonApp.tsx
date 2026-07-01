@@ -8,14 +8,15 @@ import {
 } from 'framer-motion';
 import macbooks from '../data/macbooks.json';
 
-const MAX_CPU = 35000;
-const MAX_GPU = 150000;
+const MAX_CPU = 40000;
+const MAX_GPU = 160000;
 const SPRING = { stiffness: 260, damping: 28 };
+const CATEGORY_ORDER = ['MacBook', 'MacBook Air', 'MacBook Pro', 'iMac', 'Mac mini', 'Mac Pro', 'Mac Studio'];
 
 type Macbook = typeof macbooks[number];
 
 const displayRank = (d: string) =>
-  d.includes('XDR') ? 2 : d.includes('Liquid') ? 1 : 0;
+  d.includes('XDR') ? 4 : d.includes('Liquid') ? 3 : d.includes('5K') || d.includes('4.5K') ? 2 : d.includes('Retina') || d.includes('4K') ? 1 : 0;
 
 function isUpgrade(field: keyof Macbook, a: Macbook, b: Macbook): boolean {
   if (field === 'weight')  return parseFloat(b.weight)   < parseFloat(a.weight);
@@ -273,7 +274,11 @@ export default function ComparisonApp() {
                   value={modelA.id}
                   onChange={e => setModelA(macbooks.find(m => m.id === e.target.value)!)}
                 >
-                  {macbooks.map(m => <option key={m.id} value={m.id}>{m.year} {m.name} — {m.chip}</option>)}
+                  {CATEGORY_ORDER.flatMap(cat => {
+                    const models = macbooks.filter(m => m.category === cat);
+                    if (!models.length) return [];
+                    return [<optgroup key={cat} label={cat}>{models.map(m => <option key={m.id} value={m.id}>{m.year} {m.name} — {m.chip}</option>)}</optgroup>];
+                  })}
                 </select>
               </div>
               <div className="flex items-center justify-center sm:pb-3 sm:px-1">
@@ -286,7 +291,11 @@ export default function ComparisonApp() {
                   value={modelB.id}
                   onChange={e => setModelB(macbooks.find(m => m.id === e.target.value)!)}
                 >
-                  {macbooks.map(m => <option key={m.id} value={m.id}>{m.year} {m.name} — {m.chip}</option>)}
+                  {CATEGORY_ORDER.flatMap(cat => {
+                    const models = macbooks.filter(m => m.category === cat);
+                    if (!models.length) return [];
+                    return [<optgroup key={cat} label={cat}>{models.map(m => <option key={m.id} value={m.id}>{m.year} {m.name} — {m.chip}</option>)}</optgroup>];
+                  })}
                 </select>
               </div>
             </div>
