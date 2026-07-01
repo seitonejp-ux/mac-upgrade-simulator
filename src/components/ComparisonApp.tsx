@@ -219,12 +219,69 @@ function SpecRow({ label, valueA, valueB, changed, upgraded }: SpecRowProps) {
   );
 }
 
+// ── YearFilter ────────────────────────────────────────────────────────────────
+
+const YEAR_FILTERS = [
+  { label: 'すべて', min: 0,    max: 9999 },
+  { label: '〜2015', min: 0,    max: 2015 },
+  { label: '2016〜2020', min: 2016, max: 2020 },
+  { label: '2021〜',    min: 2021, max: 9999 },
+];
+
+// ── ShareButton ───────────────────────────────────────────────────────────────
+
+function ShareButton({ idA, idB }: { idA: string; idB: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('a', idA);
+    url.searchParams.set('b', idB);
+    navigator.clipboard.writeText(url.toString()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <button
+      onClick={handleShare}
+      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-semibold tracking-[0.08em] transition-all"
+      style={{
+        background: copied ? 'rgba(52,199,89,0.12)' : 'rgba(0,113,227,0.08)',
+        color: copied ? '#34C759' : '#0071E3',
+      }}
+    >
+      {copied ? (
+        <><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5L5.5 10L11 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>コピーしました</>
+      ) : (
+        <><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 1H12V4.5M12 1L7 6M5.5 2.5H2C1.45 2.5 1 2.95 1 3.5V11C1 11.55 1.45 12 2 12H9.5C10.05 12 10.5 11.55 10.5 11V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>この比較をシェア</>
+      )}
+    </button>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+function getInitialModel(param: string | null, fallback: Macbook): Macbook {
+  if (!param) return fallback;
+  return macbooks.find(m => m.id === param) ?? fallback;
+}
+
 export default function ComparisonApp() {
-  const [modelA, setModelA] = useState<Macbook>(macbooks[0]);
-  const [modelB, setModelB] = useState<Macbook>(macbooks[macbooks.length - 1]);
+  const params = new URLSearchParams(window.location.search);
+  const [modelA, setModelA] = useState<Macbook>(() => getInitialModel(params.get('a'), macbooks[0]));
+  const [modelB, setModelB] = useState<Macbook>(() => getInitialModel(params.get('b'), macbooks[macbooks.length - 1]));
   const [bars, setBars] = useState({ cpuA: 0, cpuB: 0, gpuA: 0, gpuB: 0 });
+  const [filterA, setFilterA] = useState(0);
+  const [filterB, setFilterB] = useState(0);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('a', modelA.id);
+    url.searchParams.set('b', modelB.id);
+    window.history.replaceState(null, '', url.toString());
+  }, [modelA.id, modelB.id]);
 
   useEffect(() => {
     setBars({ cpuA: 0, cpuB: 0, gpuA: 0, gpuB: 0 });
@@ -246,6 +303,36 @@ export default function ComparisonApp() {
   const cpuRatio = (cpuDelta >= 1 ? cpuDelta : 1 / cpuDelta).toFixed(1);
   const gpuRatio = (gpuDelta >= 1 ? gpuDelta : 1 / gpuDelta).toFixed(1);
 
+  const filteredFor = (fi: number) => {
+    const { min, max } = YEAR_FILTERS[fi];
+    return macbooks.filter(m => m.year >= min && m.year <= max);
+  };
+
+  const renderOptions = (fi: number) =>
+    CATEGORY_ORDER.flatMap(cat => {
+      const models = filteredFor(fi).filter(m => m.category === cat);
+      if (!models.length) return [];
+      return [<optgroup key={cat} label={cat}>{models.map(m => <option key={m.id} value={m.id}>{m.year} {m.name} — {m.chip}</option>)}</optgroup>];
+    });
+
+  const filterChips = (active: number, setActive: (i: number) => void, onFilter: (i: number) => void) => (
+    <div className="flex flex-wrap gap-1.5 mb-3">
+      {YEAR_FILTERS.map((f, i) => (
+        <button
+          key={f.label}
+          onClick={() => { setActive(i); onFilter(i); }}
+          className="px-3 py-1 rounded-lg text-[10.5px] font-semibold transition-all"
+          style={{
+            background: active === i ? '#0071E3' : 'rgba(0,0,0,0.05)',
+            color: active === i ? '#fff' : '#6E6E73',
+          }}
+        >
+          {f.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <>
       <MeshBackground />
@@ -266,38 +353,37 @@ export default function ComparisonApp() {
 
           {/* Selector */}
           <div className="bg-white/68 backdrop-blur-2xl rounded-2xl border border-white/55 shadow-[0_4px_28px_rgba(0,0,0,0.07)] px-6 py-7 md:px-10 md:py-9">
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-3 sm:items-end">
+            <div className="flex flex-col sm:flex-row gap-6 sm:gap-3 sm:items-end">
               <div className="flex-1">
-                <label className="block text-[10.5px] font-semibold tracking-[0.16em] text-[#AEAEB2] uppercase mb-2.5">現在のモデル</label>
+                <label className="block text-[10.5px] font-semibold tracking-[0.16em] text-[#AEAEB2] uppercase mb-2">現在のモデル</label>
+                {filterChips(filterA, setFilterA, () => {})}
                 <select
                   className="w-full px-4 py-3 rounded-xl bg-black/[0.04] text-[#1D1D1F] text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0071E3] appearance-none cursor-pointer"
                   value={modelA.id}
                   onChange={e => setModelA(macbooks.find(m => m.id === e.target.value)!)}
                 >
-                  {CATEGORY_ORDER.flatMap(cat => {
-                    const models = macbooks.filter(m => m.category === cat);
-                    if (!models.length) return [];
-                    return [<optgroup key={cat} label={cat}>{models.map(m => <option key={m.id} value={m.id}>{m.year} {m.name} — {m.chip}</option>)}</optgroup>];
-                  })}
+                  {renderOptions(filterA)}
                 </select>
               </div>
               <div className="flex items-center justify-center sm:pb-3 sm:px-1">
                 <span className="text-[10px] font-bold tracking-[0.2em] text-[#C7C7CC]">VS</span>
               </div>
               <div className="flex-1">
-                <label className="block text-[10.5px] font-semibold tracking-[0.16em] text-[#AEAEB2] uppercase mb-2.5">比較するモデル</label>
+                <label className="block text-[10.5px] font-semibold tracking-[0.16em] text-[#AEAEB2] uppercase mb-2">比較するモデル</label>
+                {filterChips(filterB, setFilterB, () => {})}
                 <select
                   className="w-full px-4 py-3 rounded-xl bg-black/[0.04] text-[#1D1D1F] text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0071E3] appearance-none cursor-pointer"
                   value={modelB.id}
                   onChange={e => setModelB(macbooks.find(m => m.id === e.target.value)!)}
                 >
-                  {CATEGORY_ORDER.flatMap(cat => {
-                    const models = macbooks.filter(m => m.category === cat);
-                    if (!models.length) return [];
-                    return [<optgroup key={cat} label={cat}>{models.map(m => <option key={m.id} value={m.id}>{m.year} {m.name} — {m.chip}</option>)}</optgroup>];
-                  })}
+                  {renderOptions(filterB)}
                 </select>
               </div>
+            </div>
+
+            {/* Share */}
+            <div className="flex justify-end mt-5">
+              <ShareButton idA={modelA.id} idB={modelB.id} />
             </div>
           </div>
 
